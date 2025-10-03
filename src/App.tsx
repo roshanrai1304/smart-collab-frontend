@@ -14,6 +14,7 @@ import TeamManagement from './components/teams/TeamManagement';
 import CreateTeamPage from './components/teams/CreateTeamPage';
 import TeamDetailsPage from './components/teams/TeamDetailsPage';
 import DocumentList from './components/documents/DocumentList';
+import DocumentEditor from './components/documents/DocumentEditor';
 import './App.css';
 
 // Protected Route Component
@@ -159,14 +160,38 @@ const AppRoutes: React.FC = () => {
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/documents"
-        element={
-          <ProtectedRoute>
-            <DocumentList />
-          </ProtectedRoute>
-        }
-      />
+          <Route
+            path="/documents"
+            element={
+              <ProtectedRoute>
+                <DocumentList />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/documents/create"
+            element={
+              <ProtectedRoute>
+                <DocumentEditor isNewDocument={true} />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/documents/:documentId"
+            element={
+              <ProtectedRoute>
+                <DocumentEditor />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/documents/:documentId/edit"
+            element={
+              <ProtectedRoute>
+                <DocumentEditor />
+              </ProtectedRoute>
+            }
+          />
 
       {/* Default redirects */}
       <Route path="/" element={<Navigate to="/dashboard" replace />} />

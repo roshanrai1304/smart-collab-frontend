@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { documentService, Document, DocumentFilters } from '../../services/document.service';
 import { organizationService, Team } from '../../services/organization.service';
@@ -16,6 +17,7 @@ const CreateDocumentModal: React.FC<CreateDocumentModalProps> = ({ isOpen, onClo
     title: '',
     content: '',
     team_id: '',
+    document_type: 'rich_text' as 'text' | 'markdown' | 'rich_text' | 'wysiwyg',
     status: 'draft' as 'draft' | 'published',
     tags: ''
   });
@@ -29,12 +31,32 @@ const CreateDocumentModal: React.FC<CreateDocumentModalProps> = ({ isOpen, onClo
       if (!token) throw new Error('No access token');
 
       const tagsArray = formData.tags ? formData.tags.split(',').map(tag => tag.trim()).filter(Boolean) : [];
+      // Create proper content structure based on document type
+      let documentContent: any = formData.content;
+      if (formData.document_type === 'rich_text' || formData.document_type === 'wysiwyg') {
+        if (formData.content) {
+          documentContent = {
+            type: "doc",
+            content: [
+              {
+                type: "paragraph",
+                content: [{ text: formData.content, type: "text" }]
+              }
+            ]
+          };
+        }
+      }
+
       const newDoc = await documentService.createDocument(token, {
-        ...formData,
+        title: formData.title,
+        content: documentContent,
+        team_id: formData.team_id,
+        document_type: formData.document_type,
+        status: formData.status,
         tags: tagsArray
       });
       onSuccess(newDoc);
-      setFormData({ title: '', content: '', team_id: '', status: 'draft', tags: '' });
+      setFormData({ title: '', content: '', team_id: '', document_type: 'rich_text', status: 'draft', tags: '' });
       onClose();
     } catch (error) {
       setErrors({ general: error instanceof Error ? error.message : 'Failed to create document' });
@@ -97,6 +119,22 @@ const CreateDocumentModal: React.FC<CreateDocumentModalProps> = ({ isOpen, onClo
                   {team.name}
                 </option>
               ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Document Type
+            </label>
+            <select
+              value={formData.document_type}
+              onChange={(e) => setFormData(prev => ({ ...prev, document_type: e.target.value as any }))}
+              className="block w-full px-4 py-3 border-0 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all duration-200 text-gray-900"
+            >
+              <option value="rich_text">✨ Rich Text</option>
+              <option value="wysiwyg">🎨 WYSIWYG</option>
+              <option value="markdown">📝 Markdown</option>
+              <option value="text">📃 Plain Text</option>
             </select>
           </div>
 
@@ -209,7 +247,7 @@ const DocumentCard: React.FC<{
           </div>
           
           <p className="text-gray-600 text-sm line-clamp-2 mb-3">
-            {document.content.substring(0, 100)}...
+            {document.content ? document.content.substring(0, 100) + '...' : 'No content preview available'}
           </p>
         </div>
         
@@ -244,12 +282,14 @@ const DocumentCard: React.FC<{
 
       <div className="space-y-2 mb-4">
         <div className="flex items-center justify-between text-sm text-gray-500">
-          <span>Team: {document.team.name}</span>
-          <span>v{document.version}</span>
+          <span>Team: {document.team_name}</span>
+          <span>v{document.current_version}</span>
         </div>
         
         <div className="flex items-center justify-between text-sm text-gray-500">
-          <span>By {document.author.first_name} {document.author.last_name}</span>
+          <span>By {document.created_by.first_name && document.created_by.last_name 
+            ? `${document.created_by.first_name} ${document.created_by.last_name}`.trim()
+            : document.created_by.username}</span>
           <span>{formatDate(document.updated_at)}</span>
         </div>
 
@@ -275,13 +315,13 @@ const DocumentCard: React.FC<{
             <svg className="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
-            {document.collaborators_count} collaborators
+            0 collaborators
           </div>
           <div className="flex items-center">
             <svg className="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
-            {document.comments_count} comments
+            {document.comment_count} comments
           </div>
         </div>
         
@@ -301,6 +341,7 @@ const DocumentCard: React.FC<{
 
 const DocumentList: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
@@ -359,11 +400,14 @@ const DocumentList: React.FC = () => {
   const handleCreateSuccess = (newDoc: Document) => {
     setDocuments(prev => [newDoc, ...prev]);
     setTotalCount(prev => prev + 1);
+    
+    // Automatically navigate to the newly created document for editing
+    console.log('Navigating to newly created document:', newDoc.id);
+    navigate(`/documents/${newDoc.id}/edit`);
   };
 
   const handleEdit = (doc: Document) => {
-    console.log('Edit document:', doc);
-    // TODO: Navigate to document editor
+    navigate(`/documents/${doc.id}/edit`);
   };
 
   const handleDelete = async (docId: string) => {
@@ -382,15 +426,14 @@ const DocumentList: React.FC = () => {
   };
 
   const handleView = (doc: Document) => {
-    console.log('View document:', doc);
-    // TODO: Navigate to document viewer/editor
+    navigate(`/documents/${doc.id}`);
   };
 
   const handleFilterChange = (key: keyof DocumentFilters, value: string | number) => {
     setFilters(prev => ({
       ...prev,
       [key]: value,
-      page: key === 'page' ? value : 1 // Reset page when other filters change
+      page: key === 'page' ? (typeof value === 'number' ? value : parseInt(value.toString())) : 1 // Reset page when other filters change
     }));
   };
 
